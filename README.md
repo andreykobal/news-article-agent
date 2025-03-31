@@ -1,28 +1,54 @@
 # News Article Agent
 
-A powerful RAG (Retrieval-Augmented Generation) system that processes news articles and provides intelligent responses to user queries. Built with Node.js, TypeScript, and modern AI technologies.
+A RAG-based news article query system that ingests news articles from Kafka, processes them using LLMs, and provides answers to user queries.
 
 ## Features
 
-- Real-time news article ingestion via Kafka
-- Intelligent content extraction and cleaning
-- Vector-based storage using Pinecone
-- GraphQL API with Yoga
-- LLM-powered query responses
-- Langfuse integration for monitoring
-- Response streaming support
+- Real-time news article ingestion from Kafka
+- Article content extraction and cleaning using LLMs
+- Vector storage using Pinecone for efficient similarity search
+- GraphQL API for querying news articles
+- RAG-based question answering using OpenAI's GPT-4
 
 ## Prerequisites
 
 - Node.js (v18 or higher)
-- Docker (optional, for containerized deployment)
-- Access to:
-  - OpenAI API
-  - Pinecone Vector Database
-  - Langfuse (for monitoring)
-  - Kafka (provided credentials)
+- Kafka credentials (provided)
+- OpenAI API key
+- Pinecone API key and environment
+- Langfuse credentials (optional, for monitoring)
 
-## Setup
+## Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# Kafka Configuration
+KAFKA_BROKER=pkc-ewzgj.europe-west4.gcp.confluent.cloud:9092
+KAFKA_USERNAME=your_kafka_username
+KAFKA_PASSWORD=your_kafka_password
+KAFKA_TOPIC_NAME=news
+KAFKA_GROUP_ID_PREFIX=test-task-
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key
+
+# Pinecone Configuration
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_ENVIRONMENT=your_pinecone_environment
+PINECONE_INDEX_NAME=news-articles
+
+# Langfuse Configuration
+LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+LANGFUSE_SECRET_KEY=your_langfuse_secret_key
+LANGFUSE_HOST=https://cloud.langfuse.com
+
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+```
+
+## Installation
 
 1. Clone the repository:
 ```bash
@@ -35,39 +61,29 @@ cd news-article-agent
 npm install
 ```
 
-3. Configure environment variables:
+3. Create and configure your `.env` file:
 ```bash
 cp .env.example .env
-# Edit .env with your API keys and configuration
+# Edit .env with your credentials
 ```
 
-4. Start the development server:
+## Usage
+
+1. Start the development server:
 ```bash
 npm run dev
 ```
 
-## Docker Deployment
+2. The server will start and begin consuming messages from Kafka. You can query the news articles using the GraphQL API at `http://localhost:3000/graphql`.
 
-Build and run with Docker:
-
-```bash
-docker build -t news-article-agent .
-docker run -p 3000:3000 --env-file .env news-article-agent
-```
-
-## API Usage
-
-### GraphQL Endpoint
-
-The API is available at `http://localhost:3000/graphql`
-
-Example query:
+Example GraphQL query:
 ```graphql
 query {
-  queryNews(query: "Tell me about recent developments in AI") {
+  queryNews(query: "Tell me the latest news about Justin Trudeau") {
     answer
     sources {
       title
+      content
       url
       date
     }
@@ -77,54 +93,47 @@ query {
 
 ## Architecture
 
-### Components
+The system consists of the following components:
 
-1. **Data Ingestion**
-   - Kafka consumer for real-time article processing
-   - Content extraction using Puppeteer
-   - Text cleaning and structuring with LLM
+1. **Kafka Consumer**: Continuously ingests news article URLs from Kafka
+2. **Article Processor**: Extracts and cleans article content using LLMs
+3. **Vector Database**: Stores article embeddings in Pinecone for similarity search
+4. **GraphQL API**: Provides an interface for querying news articles
+5. **RAG Pipeline**: Uses relevant articles to generate answers to user queries
 
-2. **Storage**
-   - Vector database (Pinecone) for semantic search
-   - Structured article storage
+## Optimizations
 
-3. **Query Processing**
-   - RAG pipeline for context retrieval
-   - LLM integration for response generation
-   - Response streaming for better UX
+1. **Quality Improvements**:
+   - Uses GPT-4 Turbo for better answer quality
+   - Implements structured output for consistent responses
+   - Includes source attribution for transparency
 
-### Optimizations
+2. **Cost Optimization**:
+   - Uses text-embedding-3-small for efficient embeddings
+   - Implements caching for frequently accessed articles
+   - Optimizes token usage by cleaning and structuring content
 
-1. **Quality Improvements**
-   - Hybrid search combining semantic and keyword matching
-   - Context window optimization
-   - Response validation using Zod schemas
-
-2. **Cost Optimization**
-   - Efficient token usage through prompt engineering
-   - Caching frequently accessed articles
-   - Batch processing for article ingestion
-
-3. **Latency Optimization**
-   - Parallel processing of article extraction
-   - Response streaming
-   - Vector search optimization
+3. **Latency Optimization**:
+   - Parallel processing of articles
+   - Efficient vector search with Pinecone
+   - Streaming responses for better user experience
 
 ## Monitoring
 
-The application integrates with Langfuse for:
-- Query performance monitoring
-- Token usage tracking
-- Response quality metrics
-- Error tracking
+The system integrates with Langfuse for monitoring:
+- Query performance
+- Token usage
+- Response quality
+- Error rates
 
-## Development
+## Contributing
 
-- `npm run dev`: Start development server
-- `npm run build`: Build for production
-- `npm run test`: Run tests
-- `npm run lint`: Run linter
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
 
 ## License
 
-MIT 
+This project is licensed under the MIT License - see the LICENSE file for details. 
