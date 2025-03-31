@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
 import { OpenAI } from 'openai';
-import { PineconeClient } from '@pinecone-database/pinecone';
+import { Pinecone } from '@pinecone-database/pinecone';
 import { Article } from '../types/index.js';
 import config from '../config/index.js';
 
@@ -8,13 +8,11 @@ const openai = new OpenAI({
   apiKey: config.openai.apiKey,
 });
 
-let pinecone: PineconeClient;
+let pinecone: Pinecone;
 
 async function initPinecone() {
-  pinecone = new PineconeClient();
-  await pinecone.init({
+  pinecone = new Pinecone({
     apiKey: config.pinecone.apiKey,
-    environment: config.pinecone.environment,
   });
 }
 
@@ -80,21 +78,17 @@ export async function processArticle(url: string): Promise<void> {
     article.embedding = embeddingResponse.data[0].embedding;
 
     // Store in Pinecone
-    const index = pinecone.Index(config.pinecone.indexName);
-    await index.upsert({
-      upsertRequest: {
-        vectors: [{
-          id: url,
-          values: article.embedding,
-          metadata: {
-            title: article.title,
-            content: article.content,
-            url: article.url,
-            date: article.date,
-          }
-        }]
+    const index = pinecone.index(config.pinecone.indexName);
+    await index.upsert([{
+      id: url,
+      values: article.embedding,
+      metadata: {
+        title: article.title,
+        content: article.content,
+        url: article.url,
+        date: article.date,
       }
-    });
+    }]);
 
   } catch (error) {
     console.error('Error processing article:', error);
