@@ -1,5 +1,6 @@
 import { OpenAI } from 'openai';
 import { Pinecone } from '@pinecone-database/pinecone';
+import { Langfuse } from 'langfuse';
 import config from '../config/index.js';
 import { QueryResponse } from '../types/index.js';
 
@@ -15,9 +16,27 @@ async function initPinecone() {
   });
 }
 
+// Initialize Langfuse
+const langfuse = new Langfuse({
+  publicKey: config.langfuse.publicKey,
+  secretKey: config.langfuse.secretKey,
+  baseUrl: config.langfuse.host,
+});
+
 export const resolvers = {
   Query: {
     queryNews: async (_: unknown, { query }: { query: string }): Promise<QueryResponse> => {
+      // Create a new trace for this query
+      const trace = await langfuse.trace({
+        name: 'news-query',
+        metadata: { query }
+      });
+
+      // Create a span for the embedding generation
+      const embeddingSpan = await trace.span({
+        name: 'generate-embedding'
+      });
+
       try {
         if (!pinecone) {
           await initPinecone();
@@ -27,6 +46,13 @@ export const resolvers = {
         const embeddingResponse = await openai.embeddings.create({
           model: "text-embedding-3-small",
           input: query,
+        });
+
+        await embeddingSpan.end();
+
+        // Create a span for Pinecone search
+        const searchSpan = await trace.span({
+          name: 'pinecone-search'
         });
 
         const queryEmbedding = embeddingResponse.data[0].embedding;
@@ -39,6 +65,8 @@ export const resolvers = {
           includeMetadata: true
         });
 
+        await searchSpan.end();
+
         // Format sources
         const sources = searchResponse.matches?.map((match: any) => ({
           title: match.metadata?.title || '',
@@ -46,6 +74,11 @@ export const resolvers = {
           url: match.metadata?.url || '',
           date: match.metadata?.date || '',
         })) || [];
+
+        // Create a span for OpenAI completion
+        const completionSpan = await trace.span({
+          name: 'generate-completion'
+        });
 
         // Generate response using OpenAI
         const completion = await openai.chat.completions.create({
@@ -71,11 +104,32 @@ export const resolvers = {
           answer += content;
         }
 
+        await completionSpan.end();
+
+        // Update trace with success
+        await trace.update({
+          name: 'news-query',
+          metadata: {
+            sourcesCount: sources.length,
+            answerLength: answer.length,
+            status: 'success'
+          }
+        });
+
         return {
           answer,
           sources,
         };
       } catch (error) {
+        // Update trace with error
+        await trace.update({
+          name: 'news-query',
+          metadata: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            status: 'error'
+          }
+        });
+        
         console.error('Error processing query:', error);
         throw error;
       }
