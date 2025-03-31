@@ -3,6 +3,7 @@ import { Pinecone } from '@pinecone-database/pinecone';
 import { Langfuse } from 'langfuse';
 import config from '../config/index.js';
 import { QueryResponse } from '../types/index.js';
+import { crawlArticle } from '../services/articleCrawler.js';
 
 const openai = new OpenAI({
   apiKey: config.openai.apiKey,
@@ -131,6 +132,81 @@ export const resolvers = {
         });
         
         console.error('Error processing query:', error);
+        throw error;
+      }
+    },
+
+    summarizeArticle: async (_: unknown, { url }: { url: string }): Promise<QueryResponse> => {
+      // Create a new trace for this query
+      const trace = await langfuse.trace({
+        name: 'article-summarization',
+        metadata: { url }
+      });
+
+      try {
+        // Create a span for article crawling
+        const crawlSpan = await trace.span({
+          name: 'crawl-article'
+        });
+
+        // Crawl the article
+        const article = await crawlArticle(url);
+        await crawlSpan.end();
+
+        // Create a span for OpenAI completion
+        const completionSpan = await trace.span({
+          name: 'generate-summary'
+        });
+
+        // Generate summary using OpenAI
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4-turbo-preview",
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful assistant that provides concise and accurate summaries of news articles. Focus on the main points and key takeaways."
+            },
+            {
+              role: "user",
+              content: `Please summarize this article:\n\nTitle: ${article.title}\n\nContent: ${article.content}`
+            }
+          ],
+          stream: true,
+        });
+
+        let answer = '';
+        for await (const chunk of completion) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          answer += content;
+        }
+
+        await completionSpan.end();
+
+        // Update trace with success
+        await trace.update({
+          name: 'article-summarization',
+          metadata: {
+            articleTitle: article.title,
+            summaryLength: answer.length,
+            status: 'success'
+          }
+        });
+
+        return {
+          answer,
+          sources: [article],
+        };
+      } catch (error) {
+        // Update trace with error
+        await trace.update({
+          name: 'article-summarization',
+          metadata: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            status: 'error'
+          }
+        });
+        
+        console.error('Error summarizing article:', error);
         throw error;
       }
     },
