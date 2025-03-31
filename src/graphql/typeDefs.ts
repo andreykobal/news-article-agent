@@ -13,6 +13,5 @@ export const typeDefs = `#graphql
 
   type Query {
     queryNews(query: String!): QueryResponse!
-    summarizeArticle(url: String!): QueryResponse!
   }
 `; 
